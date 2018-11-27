@@ -1,0 +1,27 @@
+{
+  "disabled": false,
+  "bindings": [
+    {
+      "name": "myBlob",
+      "type": "blobTrigger",
+      "direction": "in",
+      "path": "upload-vendor-contract/{name}",
+      "connection": "AzureWebJobsStorage"
+    },
+    {
+      "type": "blob",
+      "dataType": "stream",
+      "name": "processedImage",
+      "path": "processed-vendor-contract/{rand-guid:D}/{name}",
+      "connection": "AzureWebJobsStorage",
+      "direction": "out"
+    },
+    {
+      "type": "queue",
+      "direction": "out",
+      "name": "outputQueue",
+      "queueName": "ocr-text",
+      "connection": "MyStorageConnectionString"
+    }
+  ]
+}
