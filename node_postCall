@@ -1,0 +1,16 @@
+var options = {
+        uri: uriBase,
+        qs: params,
+        body: '',
+        headers: {
+            'Content-Type': 'application/json',
+            'Ocp-Apim-Subscription-Key': subscriptionKey
+        }
+    }
+request.post(options, (error, response, body) => {
+            if (error) {
+                context.log('Error in getting OCR Text: ', error);
+                return;
+            }
+            
+            });
