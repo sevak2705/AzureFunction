@@ -1,0 +1,95 @@
+var base64 = require('base-64');
+const path = require('path');
+const pdf = require('pdf-poppler');
+const https = require("https");
+const fs = require("fs");
+var mkdirp = require('mkdirp');
+const storage = require('azure-storage');
+const blobService = storage.createBlobService(process.env.AzureWebJobsStorage);
+var newContainerPath = 'processed-vendor-contract';
+var accountUrl = 'https://wbcrscldevstd1.blob.core.windows.net/processed-vendor-contract/';
+module.exports = function (context, myBlob) {
+    context.log("JavaScript blob trigger function processed blob \n Name:", context.bindingData.name, "\n Blob Size:", myBlob.length, "Bytes");
+
+    var contractObj = {
+        "id": "",
+        "type": "contract",
+        "pages": []
+
+    }
+   
+ 
+    // var items = {
+    //     'id': contractObj.id,
+    //     'imageUrl': []
+    // };
+
+    //#region Pdf -> Image
+    let file = context.bindingData.uri;
+    var fileName = path.basename(file, path.extname(file)) + path.extname(file).split("?")[0];
+    var filePath = __dirname + "\\temp\\" + path.basename(file, path.extname(file)) + "\\";
+    var fileNameWithoutExtension = path.basename(file, path.extname(file));
+    contractObj.id = base64.encode(fileNameWithoutExtension); //ID
+
+    mkdirp(filePath, err => {
+        var fileStream = fs.createWriteStream(filePath + fileName);
+        https.get(file, response => {
+            response.pipe(fileStream);
+            fileStream.on('finish', function () {
+                fileStream.close(() => {
+                    context.log("downloaded");
+                    let opts = {
+                        format: 'jpeg',
+                        out_dir: filePath,
+                        out_prefix: path.basename(file, path.extname(file)),
+                        page: null
+                    }
+
+                    pdf.convert(filePath + fileName, opts)
+                        .then(res => {
+                            var count = 0;
+                            context.log('Successfully converted');
+                            fs.unlinkSync(filePath + fileName);
+                            fs.readdir(filePath, (err, Imagefiles) => {
+                                var totalfile = Imagefiles.length;
+                                Imagefiles.forEach(Imagefile => {
+                                    // const blobName = context.bindingData.folderName + "/" + Imagefile;
+                                    const blobName = Imagefile;
+                                    // const container = context.bindingData.blobTrigger.replace("/" + context.bindingData.name + ".pdf", "").replace("/" + context.bindingData.folderName, "");
+                                    context.log('My Blob -----> ' + context.bindingData.sys.randGuid + "/"+ blobName);
+                                    blobService.createBlockBlobFromLocalFile(newContainerPath , context.bindingData.sys.randGuid + "/"+ blobName, filePath + Imagefile, err => {
+                                        if (err) {
+                                            context.log(err);
+                                        } else {
+                                            count = count + 1;
+                                            contractObj.pages.push(accountUrl + context.bindingData.sys.randGuid +"/" + Imagefile);
+                                            if(totalfile == count){
+                                                context.bindings.outputQueue = contractObj;
+                                                context.log('Queue items -->' + JSON.stringify(context.bindings.outputQueue));
+                                                context.done();  
+                                           }                                          
+                                        }
+                                    });                             
+                                });
+                                // fs.unlink(__dirname);
+                                // context.log('local file deleted');
+                                //delete folder with all files
+                            })
+
+                        })
+                        .catch(error => {
+                            context.error(error);
+                        })
+                }); // close() is async, call cb after close completes.
+            });
+            fileStream.on('error', err => { // Handle errors
+                fs.unlink(__dirname); // Delete the file async. (But we don't check the result)
+                context.log(err.message);
+            });
+        }).on('error', function (err) { // Handle errors
+            fs.unlink(__dirname); // Delete the file async. (But we don't check the result)
+            context.log(err.message);
+        })
+    });
+    //#endregion Pdf ->Image
+};
